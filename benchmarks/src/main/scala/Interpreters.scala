@@ -1,44 +1,84 @@
 package scato
 package benchmarks
 
+import scalaz._
+import scalaz.Id._
+import scalaz.Free._
 import org.openjdk.jmh.annotations.{Benchmark, BenchmarkMode, Fork, Mode}
-
-object Scato {
-  import Prelude._
-  import transformers.State
-
-  def mkState[F[_]](xs: F[Int])(f: Long => (Unit, Long))(implicit F: Traversable[F]): State[Long, Unit] =
-    xs.foldLeft(State.pure[Long, Unit](()))((s, _) => s.flatMap(_ => State.state(f)))
-
-  def run[F[_]](xs: F[Int])(f: Long => (Unit, Long))(implicit F: Traversable[F]): (Unit, Long) =
-    State.run(mkState(xs)(f))(0)
-}
-
-object Scalaz {
-  import scalaz._
-  import scalaz.State
-  import scalaz.Free._
-  import scalaz.syntax.traverse._
-
-  def mkState[F[_]](xs: F[Int])(f: Long => (Long, Unit))(implicit F: Traverse[F]) =
-    xs.foldLeft(State.state[Long, Unit](()).liftF)((s, _) => s.flatMap(_ => State[Long, Unit](s => f(s)).liftF))
-
-  def run[F[_]](xs: F[Int])(f: Long => (Long, Unit))(implicit F: Traverse[F]): (Long, Unit) =
-    mkState(xs)(f).foldRun(0L)((a,b) => b(a))
-}
 
 @Fork(1)
 @BenchmarkMode(Array(Mode.Throughput))
 class Interpreters {
-  import Data._
 
-  def f0(i: Long): (Unit, Long) = ((), i + 1)
-  def f1(i: Long): (Long, Unit) = (i + 1, ())
+  def leftAssocFlatMap[F[_]](n: Int)(implicit F: Monad[F]): StateT[F, Int, Int] =
+    (1 to n).foldLeft(StateT[F, Int, Int](n => F.point((n, n))))((st, _) =>
+      st.flatMap(i => StateT(_ => F.point((i-1, i-1))))
+    )
 
-  @Benchmark def scalaz = {
-    import _root_.scalaz.std.AllInstances._
-    Scalaz.run(xs)(f1 _)
+  def rightAssocFlatMap[F[_]](implicit F: Monad[F]): StateT[F, Int, Int] =
+    StateT[F, Int, Int](n => F.point((n-1, n-1))).flatMap(i =>
+      if(i > 0) rightAssocFlatMap
+      else StateT[F, Int, Int](n => F.point((n, n)))
+    )
+
+  // strict monad (Id), don't need stack-safety
+  @Benchmark def strict_unsafe_left =
+    leftAssocFlatMap[Id](100).run(-1)
+
+  // strict monad (Id), don't need stack-safety
+  @Benchmark def strict_unsafe_right =
+    rightAssocFlatMap[Id].run(100)
+
+  // strict monad (Id), don't need stack-safety, instance reused 100x
+  @Benchmark def strict_unsafe_reused_left = {
+    val st = leftAssocFlatMap[Id](100)
+    (1 to 100).foreach { _ => st.run(-1) }
   }
 
-  @Benchmark def scato  = Scato.run(xs)(f0 _)
+  // strict monad (Id), don't need stack-safety, instance reused 100x
+  @Benchmark def strict_unsafe_reused_right = {
+    val st = rightAssocFlatMap[Id]
+    (1 to 100).foreach { _ => st.run(100) }
+  }
+
+  // strict monad (Id), need stack-safety (thus trampoline)
+  @Benchmark def strict_safe_left =
+    leftAssocFlatMap[Trampoline](100000).run(-1).run
+
+  // strict monad (Id), need stack-safety (thus trampoline)
+  @Benchmark def strict_safe_right =
+    rightAssocFlatMap[Trampoline].run(100000).run
+
+  // strict monad (Id), need stack-safety (thus trampoline), instance reused 100x
+  @Benchmark def strict_safe_reused_left = {
+    val st = leftAssocFlatMap[Trampoline](100000)
+    (1 to 100).foreach { _ => st.run(-1).run }
+  }
+
+  // strict monad (Id), need stack-safety (thus trampoline), instance reused 100x
+  @Benchmark def strict_safe_reused_right = {
+    val st = rightAssocFlatMap[Trampoline]
+    (1 to 100).foreach { _ => st.run(100000).run }
+  }
+
+  // monad already trampolined (Trampoline)
+  @Benchmark def trampolined_left =
+    leftAssocFlatMap[Trampoline](100000).run(-1).run
+
+  // monad already trampolined (Trampoline)
+  @Benchmark def trampolined_right =
+    rightAssocFlatMap[Trampoline].run(100000).run
+
+  // monad already trampolined (Trampoline), instance reused 100x
+  @Benchmark def trampolined_reused_left = {
+    val st = leftAssocFlatMap[Trampoline](100000)
+    (1 to 100).foreach { _ => st.run(-1).run }
+  }
+
+  // monad already trampolined (Trampoline), instance reused 100x
+  @Benchmark def trampolined_reused_right = {
+    val st = rightAssocFlatMap[Trampoline]
+    (1 to 100).foreach { _ => st.run(100000).run }
+  }
+
 }
