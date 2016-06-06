@@ -41,24 +41,24 @@ class Interpreters {
     (1 to 100).foreach { _ => st.run(100) }
   }
 
-  // strict monad (Id), need stack-safety (thus trampoline)
+  // strict monad (Id), need stack-safety (thus runRec)
   @Benchmark def strict_safe_left =
-    leftAssocFlatMap[Trampoline](100000).run(-1).run
+    leftAssocFlatMap[Id](100000).runRec(-1)
 
-  // strict monad (Id), need stack-safety (thus trampoline)
+  // strict monad (Id), need stack-safety (thus runRec)
   @Benchmark def strict_safe_right =
-    rightAssocFlatMap[Trampoline].run(100000).run
+    rightAssocFlatMap[Id].runRec(100000)
 
-  // strict monad (Id), need stack-safety (thus trampoline), instance reused 100x
+  // strict monad (Id), need stack-safety (thus runRec), instance reused 100x
   @Benchmark def strict_safe_reused_left = {
-    val st = leftAssocFlatMap[Trampoline](100000)
-    (1 to 100).foreach { _ => st.run(-1).run }
+    val st = leftAssocFlatMap[Id](100000)
+    (1 to 100).foreach { _ => st.runRec(-1) }
   }
 
-  // strict monad (Id), need stack-safety (thus trampoline), instance reused 100x
+  // strict monad (Id), need stack-safety (thus runRec), instance reused 100x
   @Benchmark def strict_safe_reused_right = {
-    val st = rightAssocFlatMap[Trampoline]
-    (1 to 100).foreach { _ => st.run(100000).run }
+    val st = rightAssocFlatMap[Id]
+    (1 to 100).foreach { _ => st.runRec(100000) }
   }
 
   // monad already trampolined (Trampoline)

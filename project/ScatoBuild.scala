@@ -52,7 +52,7 @@ object ScatoBuild extends Build {
       libraryDependencies ++=
         Seq ( "org.scala-lang" % "scala-reflect" % scalaVersion.value
             , "org.scala-lang" % "scala-compiler" % scalaVersion.value % "provided"
-            , "org.scalaz" %% "scalaz-core" % "7.3.0-M3"
+            , "org.scalaz" %% "scalaz-core" % "7.3.0-St1"
             , "org.typelevel" %% "cats" % "0.5.0" )
     )
 
